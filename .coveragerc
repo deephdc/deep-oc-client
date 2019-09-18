@@ -1,0 +1,7 @@
+[run]
+branch = True
+source = deep_oc_client
+omit = deep_oc_client/tests/*,deep_oc_client/openstack/*
+
+[report]
+ignore-errors = True
