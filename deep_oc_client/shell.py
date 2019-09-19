@@ -44,7 +44,11 @@ class DeepOcApp(app.App):
 
     def initialize_app(self, argv):
         if self.client is None:
-            self.client = client.DeepOcClient()
+            self.client = client.DeepOcClient(
+                state_dir=self.options.state_dir,
+                debug=self.options.debug,
+                cache=self.options.cache
+            )
 
     def prepare_to_run_command(self, cmd):
         if isinstance(cmd, help.HelpCommand):
@@ -57,6 +61,19 @@ class DeepOcApp(app.App):
             argparse_kwargs={
                 "formatter_class": argparse.RawDescriptionHelpFormatter,
             })
+
+        parser.add_argument("-s", "--state-dir",
+                            metavar="<state-directory>",
+                            default="~/.deep-oc",
+                            help="Directory where the DEEP OC CLI will"
+                                 "maintain its status(default: ~/.deep-oc"),
+
+        parser.add_argument("-c", "--cache",
+                            metavar="<seconds>",
+                            default=300,
+                            type=int,
+                            help="Number of seconds to cache results. Set to "
+                                 "-1 to disable cache at all. Defaults to 300")
         return parser
 
 

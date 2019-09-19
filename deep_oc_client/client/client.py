@@ -15,9 +15,14 @@
 # under the License.
 
 import copy
+import functools
 import hashlib
 import json
 import logging
+import os
+import os.path
+import sqlite3
+import time
 import yaml
 
 import requests
@@ -34,13 +39,67 @@ class _JSONEncoder(json.JSONEncoder):
         return super(_JSONEncoder, self).default(o)
 
 
+def cache_request(f):
+    """Decorator to cache requests."""
+
+    @functools.wraps(f)
+    def wrapper(self, url, method, **kwargs):
+        if method.lower() == "get":
+            cache_db = os.path.join(self.cache_dir, "cache")
+            try:
+                conn = sqlite3.connect(cache_db)
+                with conn:
+                    conn.execute(
+                        "CREATE TABLE IF NOT EXISTS module "
+                        "    (id INTEGER PRIMARY KEY, "
+                        "     url TEXT UNIQUE, "
+                        "     metadata TEXT, "
+                        "     timestamp REAL"
+                        "    )")
+                    row = conn.execute(
+                        "SELECT metadata, timestamp "
+                        "FROM module "
+                        "WHERE url = ?", (url,)).fetchone()
+
+                    now = time.time()
+
+                    if not row or now - row[1] > self.cache_seconds:
+                        resp, content = f(self, url, method, **kwargs)
+                        if not row:
+                            conn.execute(
+                                "INSERT INTO module "
+                                "(url, metadata, timestamp) "
+                                "VALUES (?, ?, ?)",
+                                (url, self._json.encode(content), now))
+                        else:
+                            conn.execute(
+                                "UPDATE module SET"
+                                "   metadata = ?, timestamp = ? "
+                                "WHERE url = ?",
+                                (self._json.encode(content), now, url))
+                    else:
+                        resp = requests.Response
+                        resp.status_code = 200
+                        content = json.loads(row[0])
+
+            except sqlite3.Error as e:
+                raise e
+            finally:
+                conn.close()
+            return resp, content
+        else:
+            return f(self, url, method, **kwargs)
+
+    return wrapper
+
+
 class DeepOcClient(object):
     """The DEEP OC client class."""
 
     _catalog_url = ("https://raw.githubusercontent.com/deephdc/"
                     "deephdc.github.io/pelican/project_apps.yml")
 
-    def __init__(self, debug=False):
+    def __init__(self, cache=300, state_dir="~/.deep-oc/", debug=False):
         """Initialization of DeepOcClient object.
 
         :param bool debug: whether to enable debug logging
@@ -70,6 +129,12 @@ class DeepOcClient(object):
         self._json = _JSONEncoder()
         self.session = requests.Session()
 
+        self.cache_seconds = cache
+
+        self.state_dir = state_dir
+        self.cache_dir = None
+        self.init_state_dir()
+
     @property
     def modules(self):
         """Interface to query for modules.
@@ -79,6 +144,20 @@ class DeepOcClient(object):
         """
         return self._modules
 
+    def init_state_dir(self):
+        self.state_dir = os.path.expanduser(self.state_dir)
+        self.cache_dir = os.path.join(self.state_dir, "cache")
+        for d in (".", ):
+            d = os.path.join(self.state_dir, d)
+            if os.path.exists(d):
+                if not os.path.isdir(d):
+                    raise exceptions.ClientException(
+                        message="Cannot use %s, is not a directory" % d
+                    )
+            else:
+                os.mkdir(d)
+
+    @cache_request
     def request(self, url, method, json=None, **kwargs):
         """Send an HTTP request with the specified characteristics.
 
