@@ -38,3 +38,7 @@ class Modules(object):
             modules[entry["module"]]["url"] = entry["module"]
 
         return modules
+
+    def show(self, module_url):
+        resp, results = self.client.get(self.get_metadata_url(module_url))
+        return results
