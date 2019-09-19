@@ -20,15 +20,38 @@ import sys
 from cliff import app
 from cliff import commandmanager
 from cliff import help
+import cliff.interactive
 
 from deep_oc_client.client import client
 from deep_oc_client import version
+
+INTRO = """
+     ##         ###
+     ##       ######  ##
+ .#####   #####   #######.  .#####.
+##   ## ## //   ##  //  ##  ##   ##
+##. .##  ###  ###   // ###  ##   ##
+  ## ##    ####     ####    #####.
+          Hybrid-DataCloud  ##
+
+"""
+
+BANNER = """
+    This tool will help you browsing the DEEP OC Marketplace contents
+    (https://marketplace.deep-hybrid-datacloud.eu) and interact with them.
+"""
+
+
+class InteractiveApp(cliff.interactive.InteractiveApp):
+    def cmdloop(self, *args, **kwargs):
+        intro = INTRO + BANNER
+        self.poutput(str(intro) + "\n")
+        super(InteractiveApp, self).cmdloop(*args, **kwargs)
 
 
 class DeepOcApp(app.App):
     """Command line client for the DEEP Open Catalog (DEEP OC).
 
-    boilerplate text
     """
 
     def __init__(self):
@@ -41,6 +64,8 @@ class DeepOcApp(app.App):
             version=version.__version__,
             command_manager=cm,
             deferred_help=True)
+
+        self.interactive_app_factory = InteractiveApp
 
     def initialize_app(self, argv):
         if self.client is None:
@@ -56,7 +81,7 @@ class DeepOcApp(app.App):
 
     def build_option_parser(self, description, version):
         parser = super(DeepOcApp, self).build_option_parser(
-            self.__doc__,
+            self.__doc__ + BANNER,
             version,
             argparse_kwargs={
                 "formatter_class": argparse.RawDescriptionHelpFormatter,
